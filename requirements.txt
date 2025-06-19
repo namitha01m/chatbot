@@ -1,0 +1,10 @@
+langchain
+langchain-community
+langchain-chroma
+langchain-ollama
+pypdf
+beautifulsoup4
+ollama
+sentence-transformers 
+python-dotenv
+streamlit
