@@ -2,37 +2,37 @@ import requests
 import json
 import os
 from typing import List, Dict, Any
+import time # For retries
 
 # Assuming vector_store_manager.py is in the same directory and already ingested data
+# Import the ChromaDBManager from vector_store_manager.py directly
 from vector_store_manager import ChromaDBManager, CHROMA_DB_PATH, COLLECTION_NAME
 
 # --- Configuration for Ollama ---
-OLLAMA_API_BASE_URL = "http://localhost:11434" # Default Ollama API address
-OLLAMA_MODEL_NAME = "llama3" # The Llama model you pulled using 'ollama pull llama3'
-N_RETRIEVED_CHUNKS = 5 # Number of top relevant chunks to retrieve from ChromaDB
+OLLAMA_API_BASE_URL = "http://localhost:11434"
+OLLAMA_MODEL_NAME = "llama3"
+N_RETRIEVED_CHUNKS = 5
 
 # --- Ollama Llama Model Interaction ---
 def generate_llama_response(prompt: str) -> str:
-    """
-    Sends a prompt to the local Ollama Llama model and returns the generated response.
-    """
+    # ... (this function remains the same as before) ...
     url = f"{OLLAMA_API_BASE_URL}/api/generate"
     headers = {"Content-Type": "application/json"}
     data = {
         "model": OLLAMA_MODEL_NAME,
         "prompt": prompt,
-        "stream": False # We want the full response at once
+        "stream": False
     }
 
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(data), timeout=300) # 5 min timeout
-        response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+        response = requests.post(url, headers=headers, data=json.dumps(data), timeout=300)
+        response.raise_for_status()
         
         result = response.json()
         return result["response"]
     except requests.exceptions.ConnectionError:
         print(f"Error: Could not connect to Ollama server at {OLLAMA_API_BASE_URL}.")
-        print("Please ensure Ollama is running and the model '{OLLAMA_MODEL_NAME}' is downloaded (ollama pull {OLLAMA_MODEL_NAME}).")
+        print(f"Please ensure Ollama is running and the model '{OLLAMA_MODEL_NAME}' is downloaded (ollama pull {OLLAMA_MODEL_NAME}).")
         return "ERROR: Ollama server not reachable."
     except requests.exceptions.Timeout:
         print("Error: Ollama request timed out. The model might be taking too long to respond, or the prompt is too complex.")
@@ -47,12 +47,8 @@ def generate_llama_response(prompt: str) -> str:
 
 # --- RAG Agent Core ---
 def rag_agent_query(user_query: str, chroma_manager: ChromaDBManager) -> str:
-    """
-    Performs a RAG query: retrieves relevant docs and generates a response using Llama.
-    """
     print(f"\nUser Query: '{user_query}'")
 
-    # 1. Retrieve relevant chunks from ChromaDB
     print(f"Retrieving top {N_RETRIEVED_CHUNKS} relevant chunks from ChromaDB...")
     retrieved_results = chroma_manager.query_collection(user_query, n_results=N_RETRIEVED_CHUNKS)
     
@@ -70,8 +66,6 @@ def rag_agent_query(user_query: str, chroma_manager: ChromaDBManager) -> str:
         print("No relevant context found in ChromaDB.")
         return "I couldn't find enough relevant information in my knowledge base to answer that question. Please try rephrasing or ask about a different topic."
 
-    # 2. Construct the prompt for Llama
-    # System instruction for Llama (crucial for RAG)
     system_instruction = (
         "You are an expert AI assistant providing concise, fact-based guidance on hydrogen rules of thumb. "
         "Answer the user's question ONLY based on the provided CONTEXT. "
@@ -82,12 +76,6 @@ def rag_agent_query(user_query: str, chroma_manager: ChromaDBManager) -> str:
 
     context_string = "\n\n".join(context_chunks)
 
-    # Combine instruction, context, and user query
-    # Llama 3 often responds well to explicit roles like <|begin_of_text|> and <|end_of_text|>
-    # and <|start_header_id|>...<|end_header_id|> for instructions/roles
-    # For simplicity with the /api/generate endpoint, a clear instruction prefix usually works.
-    
-    # Using a common prompt template structure that Llama models understand
     full_prompt = (
         f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n"
         f"{system_instruction}\n"
@@ -97,7 +85,6 @@ def rag_agent_query(user_query: str, chroma_manager: ChromaDBManager) -> str:
         f"<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n"
     )
 
-    # 3. Generate response using Llama
     print("Generating response with Llama model...")
     llama_response = generate_llama_response(full_prompt)
     
@@ -106,19 +93,37 @@ def rag_agent_query(user_query: str, chroma_manager: ChromaDBManager) -> str:
 # --- Main Execution Loop ---
 if __name__ == "__main__":
     print("Initializing RAG Agent...")
+    print(f"ChromaDB persistence path: {CHROMA_DB_PATH}")
     
-    # Initialize ChromaDB Manager
-    # This assumes your ChromaDB already contains the hydrogen rules of thumb embeddings
+    # Initialize ChromaDB Manager for RAG (do NOT create new/delete collection here)
     try:
-        chroma_manager = ChromaDBManager(CHROMA_DB_PATH, COLLECTION_NAME)
-        # Verify if there are documents in the collection
-        if chroma_manager.collection.count() == 0:
-            print("WARNING: ChromaDB collection is empty. Please run vector_store_manager.py first to ingest data.")
+        # ChromaDBManager(..., create_new=False) is implied default, but explicit for clarity
+        chroma_manager = ChromaDBManager(CHROMA_DB_PATH, COLLECTION_NAME, create_new=False) 
+        
+        # Robust check for collection count
+        retries = 5
+        count = 0
+        for i in range(retries):
+            try:
+                count = chroma_manager.collection.count()
+                if count > 0:
+                    break
+            except Exception as e:
+                print(f"Error checking collection count: {e}")
+            print(f"Retrying collection count (attempt {i+1}/{retries})...")
+            time.sleep(2) # Wait longer between retries
+
+        if count == 0:
+            print("WARNING: ChromaDB collection is empty. Please ensure vector_store_manager.py ran successfully and data is persisted.")
+            print(f"Checked ChromaDB at: {CHROMA_DB_PATH}, Collection: {COLLECTION_NAME}")
             exit()
-        print(f"ChromaDB has {chroma_manager.collection.count()} documents loaded.")
+        print(f"ChromaDB has {count} documents loaded.")
     except Exception as e:
         print(f"Failed to initialize ChromaDB Manager: {e}")
+        print(f"Attempted to access ChromaDB at: {CHROMA_DB_PATH}, Collection: {COLLECTION_NAME}")
         print("Please ensure vector_store_manager.py ran successfully and data is persisted.")
+        import traceback
+        traceback.print_exc()
         exit()
 
     print(f"\n--- Hydrogen 'Rules of Thumb' Agent ---")
