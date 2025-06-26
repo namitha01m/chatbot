@@ -66,10 +66,18 @@ def rag_agent_query(user_query: str, chroma_manager: ChromaDBManager) -> str:
         print("No relevant context found in ChromaDB.")
         return "I couldn't find enough relevant information in my knowledge base to answer that question. Please try rephrasing or ask about a different topic."
 
-    system_instruction = (
+    '''system_instruction = (
         "You are an expert AI assistant providing concise, fact-based guidance on hydrogen rules of thumb. "
         "Answer the user's question ONLY based on the provided CONTEXT. "
         "If the answer is not in the CONTEXT, state that you don't have enough information from the provided context. "
+        "Prioritize providing yes/no decision guidance or initial high-level assessment where applicable, as per your goal. "
+        "Cite the filename and page number from the source for each piece of information you provide."
+    )'''
+    system_instruction = (
+        "You are an expert AI assistant providing concise, fact-based guidance on hydrogen rules of thumb. "
+        "Answer the user's question ONLY based on the provided CONTEXT. "
+        "If the answer is not in the CONTEXT, state that you don't have enough information from the provided context "
+        "and **do not offer any other assistance or information beyond the scope of hydrogen energy or the provided context.** " # <-- ADD THIS PART
         "Prioritize providing yes/no decision guidance or initial high-level assessment where applicable, as per your goal. "
         "Cite the filename and page number from the source for each piece of information you provide."
     )
