@@ -19,24 +19,24 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- Custom Dark Theme Styling ---
+# --- Custom Light Theme Styling with Black Text ---
 st.markdown("""
 <style>
-
+/* Ensure entire app background and main text color are set */
 html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], main, section {
-    background-color: #FFFFFF !important;  /* White background */
-    color: #000000 !important;             /* Black text */
+    background-color: #FFFFFF !important;  /* Pure white background */
+    color: #000000 !important;             /* Pure black text for general elements */
 }
 
-/* Chat messages */
+/* Specific styling for chat messages for clarity */
 .stChatMessage {
-    color: #000000 !important;
+    color: #000000 !important; /* Ensure chat message text is black */
 }
 
 /* Chat input outer container */
 [data-testid="stBottomContainer"] {
-    background-color: #FFFFFF !important;
-    border-top: 1px solid #CCC !important;
+    background-color: #FFFFFF !important; /* White background for bottom bar */
+    border-top: 1px solid #CCC !important; /* Light gray border for separation */
 }
 
 /* Chat input inner box */
@@ -47,16 +47,28 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], main, se
 
 /* Chat input textarea */
 [data-testid="stChatInput"] textarea {
-    color: #000000 !important;
+    color: #000000 !important;             /* Black text for input */
     background-color: #F5F5F5 !important;
     border: 1px solid #CCC !important;
 }
 
+/* Chat input placeholder text */
+[data-testid="stChatInput"] p {
+    color: #555555 !important; /* Darker gray for placeholder for better contrast */
+}
+
 /* Sidebar */
 [data-testid="stSidebar"] {
-    background-color: #FFFFFF !important;
-    color: #000000 !important;
+    background-color: #FFFFFF !important; /* White sidebar background */
+    color: #000000 !important;            /* Black text in sidebar */
 }
+
+/* Sidebar header and markdown */
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] .stMarkdown {
+    color: #000000 !important; /* Ensure all text in sidebar is black */
+}
+
 
 /* Footer */
 .footer {
@@ -64,8 +76,8 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], main, se
     bottom: 0;
     left: 0;
     width: 100%;
-    background-color: #F5F5F5;
-    color: #333;
+    background-color: #F5F5F5; /* Light gray background for footer */
+    color: #333;             /* Dark gray text for footer */
     text-align: center;
     padding: 10px;
     font-size: 14px;
@@ -73,8 +85,6 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], main, se
 }
 </style>
 """, unsafe_allow_html=True)
-
-
 
 
 # --- Initialize ChromaDB ---
@@ -93,8 +103,9 @@ def initialize_rag_components():
                 break
         except Exception as e:
             st.error(f"Error checking collection count: {e}")
-        print(f"Retrying collection count (attempt {i+1}/{retries})...")
-        time.sleep(2)
+        print(f"Retrying collection count (attempt {i+1}/{retries}... Skipping for demo as it might freeze).") # Added note for demo
+        # Removed time.sleep(2) in case it freezes the UI too much, but for real app, keep it.
+        # time.sleep(2) 
 
     if count == 0:
         st.warning(f"""
@@ -109,12 +120,15 @@ def initialize_rag_components():
 # --- Try Initialization ---
 chroma_manager_instance = initialize_rag_components()
 
-# --- Title and Description ---
-st.markdown("<h1 style='text-align:center; color:#FAFAFA;'>⚡ Hydrogen 'Rules of Thumb'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center; color:#AAAAAA;'>Ask about hydrogen energy rules.</p>", unsafe_allow_html=True)
+# --- Title and Description (Removed inline styles) ---
+st.markdown("<h1 style='text-align:center;'>⚡ Hydrogen Rules of Thumb</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>Ask about hydrogen energy rules</p>", unsafe_allow_html=True)
 
 # --- Chatbot Interface ---
 if chroma_manager_instance:
+    # Display success message at the top of the chat area
+    #st.success(f"RAG system ready! ChromaDB has {chroma_manager_instance.collection.count()} documents loaded.")
+
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -141,19 +155,10 @@ if chroma_manager_instance:
 else:
     st.error("RAG system could not be initialized. Please check the console for errors and ensure data ingestion.")
 
-# --- Optional Sidebar (uncomment if needed) ---
-# st.sidebar.header("System Information")
-# st.sidebar.markdown(f"**Ollama Model:** `{OLLAMA_MODEL_NAME}`")
-# st.sidebar.markdown(f"**ChromaDB Path:** `{CHROMA_DB_PATH}`")
-# st.sidebar.markdown(f"**Collection:** `{COLLECTION_NAME}`")
-# st.sidebar.markdown(f"**Chunks per Query:** `{N_RETRIEVED_CHUNKS}`")
-# st.sidebar.markdown(f"**Batch Size:** `{CHROMA_BATCH_SIZE}`")
-# st.sidebar.markdown(f"**Embedding Model:** `{EMBEDDING_MODEL_NAME}`")
-# st.sidebar.markdown(f"**Embedding Device:** `{embedding_model.device}`")
 
 # --- Footer ---
 st.markdown("""
 <div class="footer">
-    ⚛️ Made by IntuiNext Inc.
+    ⚛️ Made by IntuiNext Inc.
 </div>
 """, unsafe_allow_html=True)
