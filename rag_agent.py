@@ -66,21 +66,18 @@ def rag_agent_query(user_query: str, chroma_manager: ChromaDBManager) -> str:
         print("No relevant context found in ChromaDB.")
         return "I couldn't find enough relevant information in my knowledge base to answer that question. Please try rephrasing or ask about a different topic."
 
-    '''system_instruction = (
-        "You are an expert AI assistant providing concise, fact-based guidance on hydrogen rules of thumb. "
-        "Answer the user's question ONLY based on the provided CONTEXT. "
-        "If the answer is not in the CONTEXT, state that you don't have enough information from the provided context. "
-        "Prioritize providing yes/no decision guidance or initial high-level assessment where applicable, as per your goal. "
-        "Cite the filename and page number from the source for each piece of information you provide."
-    )'''
+  
     system_instruction = (
-        "You are an expert AI assistant providing concise, fact-based guidance on hydrogen rules of thumb. "
-        "Answer the user's question ONLY based on the provided CONTEXT. "
-        "If the answer is not in the CONTEXT, state that you don't have enough information from the provided context "
-        "and **do not offer any other assistance or information beyond the scope of hydrogen energy or the provided context.** " # <-- ADD THIS PART
-        "Prioritize providing yes/no decision guidance or initial high-level assessment where applicable, as per your goal. "
-        "Cite the filename and page number from the source for each piece of information you provide."
-    )
+    "You are a helpful and precise AI assistant specialized in hydrogen energy rules of thumb. "
+    "Answer user questions strictly based on the provided CONTEXT. "
+    "If the required information is not found in the CONTEXT, clearly state: 'There is not enough information in the provided context.' "
+    "Do not provide answers beyond the CONTEXT or outside the scope of hydrogen energy. "
+    "Where possible, provide **yes/no decisions** or a **high-level initial assessment**. "
+    "For multi-part answers, use a **numbered list**, with each point on a new line. "
+    "Use **bold** formatting for key terms, methods, or decisions to improve readability. "
+    "End each response with a 'Sources:' section listing references in this format: (Source: filename.pdf, Page: X).")
+     
+
 
     context_string = "\n\n".join(context_chunks)
 
