@@ -2,20 +2,19 @@ import requests
 import json
 import os
 from typing import List, Dict, Any
-import time # For retries
+import time
 
-# Assuming vector_store_manager.py is in the same directory and already ingested data
-# Import the ChromaDBManager from vector_store_manager.py directly
-from vector_store_manager import ChromaDBManager, CHROMA_DB_PATH, COLLECTION_NAME
 
-# --- Configuration for Ollama ---
+from vector_store_manager import FAISSManager, FAISS_INDEX_PATH, FAISS_METADATA_PATH, generate_embeddings
+# checking for evaltion
+#from evaluation import evaluate_groundedness, evaluate_relevance
+
 OLLAMA_API_BASE_URL = "http://localhost:11434"
 OLLAMA_MODEL_NAME = "llama3"
 N_RETRIEVED_CHUNKS = 5
 
-# --- Ollama Llama Model Interaction ---
+#  Llama 
 def generate_llama_response(prompt: str) -> str:
-    # ... (this function remains the same as before) ...
     url = f"{OLLAMA_API_BASE_URL}/api/generate"
     headers = {"Content-Type": "application/json"}
     data = {
@@ -45,39 +44,57 @@ def generate_llama_response(prompt: str) -> str:
         return "ERROR: Invalid response from Ollama."
 
 
-# --- RAG Agent Core ---
-def rag_agent_query(user_query: str, chroma_manager: ChromaDBManager) -> str:
+# rag
+def rag_agent_query(user_query: str, faiss_manager: FAISSManager) -> str: 
     print(f"\nUser Query: '{user_query}'")
 
-    print(f"Retrieving top {N_RETRIEVED_CHUNKS} relevant chunks from ChromaDB...")
-    retrieved_results = chroma_manager.query_collection(user_query, n_results=N_RETRIEVED_CHUNKS)
+    
+    simple_greetings = ["hi", "hello", "hey", "hola", "good morning", "good afternoon", "good evening"]
+    if user_query.lower().strip() in simple_greetings:
+        return "Hello! I'm an expert AI assistant providing concise, fact-based guidance on hydrogen rules of thumb. What would you like to know?"
+
+    print(f"Retrieving top {N_RETRIEVED_CHUNKS} relevant chunks from FAISS...")
+    retrieved_results = faiss_manager.query_collection(user_query, n_results=N_RETRIEVED_CHUNKS)
     
     context_chunks = []
+    unique_sources = set() 
+
     if retrieved_results and retrieved_results['documents'] and retrieved_results['documents'][0]:
         for i in range(len(retrieved_results['documents'][0])):
             doc_content = retrieved_results['documents'][0][i]
             metadata = retrieved_results['metadatas'][0][i]
-            context_chunks.append(
-                f"Source: {metadata.get('filename', 'N/A')} (Page: {metadata.get('page_number', 'N/A')})\n"
-                f"Content: {doc_content}"
-            )
+            
+            source_info = f"{metadata.get('filename', 'N/A')} "
+            
+            context_chunks.append(f"Source: {source_info}\nContent: {doc_content}")
+            unique_sources.add(source_info) # Collect unique sources here
+
         print(f"Retrieved {len(context_chunks)} relevant chunks.")
     else:
-        print("No relevant context found in ChromaDB.")
+        print("No relevant context found in FAISS index.")
         return "I couldn't find enough relevant information in my knowledge base to answer that question. Please try rephrasing or ask about a different topic."
+    
+    # for evaluation
+    #context_string = "\n\n".join(context_chunks)
 
-  
+    #citation
+    sources_for_llm_citation = ""
+    if unique_sources:
+        #use after response
+        sources_for_llm_citation = "\n\nAvailable Sources for Citation:\n" + "\n".join([f"- {s}" for s in sorted(list(unique_sources))])
+
     system_instruction = (
-    "You are a helpful and precise AI assistant specialized in hydrogen energy rules of thumb. "
-    "Answer user questions strictly based on the provided CONTEXT. "
-    "If the required information is not found in the CONTEXT, clearly state: 'There is not enough information in the provided context.' "
-    "Do not provide answers beyond the CONTEXT or outside the scope of hydrogen energy. "
-    "Where possible, provide **yes/no decisions** or a **high-level initial assessment**. "
-    "For multi-part answers, use a **numbered list**, with each point on a new line. "
-    "Use **bold** formatting for key terms, methods, or decisions to improve readability. "
-    "End each response with a 'Sources:' section listing references in this format: (Source: filename.pdf, Page: X).")
-     
-
+        "You are an expert AI assistant providing concise, fact-based guidance on hydrogen rules of thumb. "
+        "Answer the user's question ONLY based on the provided CONTEXT. "
+        "If the answer is not in the CONTEXT or the question is outside the scope of hydrogen energy, "
+        "respond with the exact phrase: 'I am not able to answer questions that are not related to hydrogen energy.' "
+        "Prioritize providing yes/no decision guidance or initial high-level assessment where applicable, as per your goal. "
+        "For lists or multiple points, present the information as a **numbered list** with each item starting on a new line. "
+        "**Bold** key terms or method names for better readability. "
+        "After your complete answer, provide all source citations in a separate 'Sources:' section at the very end, "
+        "listing each unique filename and page number for PDFs. "
+        "For example: (Source: filename)."
+    )
 
     context_string = "\n\n".join(context_chunks)
 
@@ -85,54 +102,51 @@ def rag_agent_query(user_query: str, chroma_manager: ChromaDBManager) -> str:
         f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n"
         f"{system_instruction}\n"
         f"CONTEXT:\n{context_string}\n\n"
-        f"<|start_header_id|>user<|end_header_id|>\n"
+        
+        f"{sources_for_llm_citation}\n\n" 
+        f"<|start_of_text|><|start_header_id|>user<|end_header_id|>\n"
         f"{user_query}\n"
         f"<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n"
     )
 
     print("Generating response with Llama model...")
     llama_response = generate_llama_response(full_prompt)
-    
+    '''
+    print("\n--- Evaluating Response Quality ---")
+    groundedness_score, groundedness_reason = evaluate_groundedness(llama_response, context_string)
+    print(f"Groundedness Score: {groundedness_score:.2f}, Reason: '{groundedness_reason}'")
+
+    relevance_score, relevance_reason = evaluate_relevance(user_query, llama_response)
+    print(f"Relevance Score: {relevance_score:.2f}, Reason: '{relevance_reason}'")
+    print("-----------------------------------\n")
+    '''
     return llama_response
 
-# --- Main Execution Loop ---
+
 if __name__ == "__main__":
     print("Initializing RAG Agent...")
-    print(f"ChromaDB persistence path: {CHROMA_DB_PATH}")
+    from vector_store_manager import FAISS_INDEX_PATH, FAISS_METADATA_PATH
+    print(f"FAISS Index path: {FAISS_INDEX_PATH}")
+    print(f"FAISS Metadata path: {FAISS_METADATA_PATH}")
     
-    # Initialize ChromaDB Manager for RAG (do NOT create new/delete collection here)
     try:
-        # ChromaDBManager(..., create_new=False) is implied default, but explicit for clarity
-        chroma_manager = ChromaDBManager(CHROMA_DB_PATH, COLLECTION_NAME, create_new=False) 
+        faiss_manager = FAISSManager(FAISS_INDEX_PATH, FAISS_METADATA_PATH) 
         
-        # Robust check for collection count
-        retries = 5
-        count = 0
-        for i in range(retries):
-            try:
-                count = chroma_manager.collection.count()
-                if count > 0:
-                    break
-            except Exception as e:
-                print(f"Error checking collection count: {e}")
-            print(f"Retrying collection count (attempt {i+1}/{retries})...")
-            time.sleep(2) # Wait longer between retries
-
-        if count == 0:
-            print("WARNING: ChromaDB collection is empty. Please ensure vector_store_manager.py ran successfully and data is persisted.")
-            print(f"Checked ChromaDB at: {CHROMA_DB_PATH}, Collection: {COLLECTION_NAME}")
+        if faiss_manager.count() == 0:
+            print("WARNING: FAISS index is empty. Please ensure vector_store_manager.py ran successfully to ingest data.")
+            print(f"Checked FAISS files at: {FAISS_INDEX_PATH}, {FAISS_METADATA_PATH}")
             exit()
-        print(f"ChromaDB has {count} documents loaded.")
+        print(f"FAISS index has {faiss_manager.count()} documents loaded.")
     except Exception as e:
-        print(f"Failed to initialize ChromaDB Manager: {e}")
-        print(f"Attempted to access ChromaDB at: {CHROMA_DB_PATH}, Collection: {COLLECTION_NAME}")
-        print("Please ensure vector_store_manager.py ran successfully and data is persisted.")
+        print(f"Failed to initialize FAISS Manager: {e}")
+        print(f"Attempted to access FAISS files at: {FAISS_INDEX_PATH}, {FAISS_METADATA_PATH}")
+        print("Please ensure vector_store_manager.py ran successfully to ingest data.")
         import traceback
         traceback.print_exc()
         exit()
 
     print(f"\n--- Hydrogen 'Rules of Thumb' Agent ---")
-    print(f"Powered by Llama3 ({OLLAMA_MODEL_NAME}) and ChromaDB.")
+    print(f"Powered by Llama3 ({OLLAMA_MODEL_NAME}) and FAISS.")
     print("Type your query and press Enter. Type 'exit' to quit.")
 
     while True:
@@ -141,5 +155,5 @@ if __name__ == "__main__":
             print("Exiting agent. Goodbye!")
             break
         
-        response = rag_agent_query(user_input, chroma_manager)
+        response = rag_agent_query(user_input, faiss_manager)
         print(f"\nAgent Response:\n{response}")

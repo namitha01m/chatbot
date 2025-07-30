@@ -1,83 +1,85 @@
 import streamlit as st
 import os
 import sys
-import time  # For retry logic
+import time 
 
-# --- Path Setup ---
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
-# --- Module Imports ---
-from vector_store_manager import ChromaDBManager, CHROMA_DB_PATH, COLLECTION_NAME, \
-                                 generate_embeddings, CHROMA_BATCH_SIZE, EMBEDDING_MODEL_NAME, embedding_model
+
+from vector_store_manager import FAISSManager, FAISS_INDEX_PATH, FAISS_METADATA_PATH, \
+                                       EMBEDDING_MODEL_NAME, embedding_model, \
+                                       CHUNK_SIZE_TOKENS, CHUNK_OVERLAP_TOKENS # Import chunking params for sidebar
 from rag_agent import rag_agent_query, OLLAMA_MODEL_NAME, N_RETRIEVED_CHUNKS
 
-# --- Streamlit App Config ---
+
+# Streamlit
 st.set_page_config(
     page_title="🔋 Hydrogen Rules of Thumb",
     page_icon="⚛️",
     layout="centered"
 )
 
-# --- Custom Light Theme Styling with Black Text ---
+
 st.markdown("""
 <style>
-/* Ensure entire app background and main text color are set */
+
 html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], main, section {
-    background-color: #FFFFFF !important;  /* Pure white background */
-    color: #000000 !important;             /* Pure black text for general elements */
+    background-color: #FFFFFF !important;  
+    color: #000000 !important;             
 }
 
-/* Specific styling for chat messages for clarity */
+
 .stChatMessage {
-    color: #000000 !important; /* Ensure chat message text is black */
+    color: #000000 !important; 
 }
 
-/* Chat input outer container */
+
 [data-testid="stBottomContainer"] {
-    background-color: #FFFFFF !important; /* White background for bottom bar */
-    border-top: 1px solid #CCC !important; /* Light gray border for separation */
+    background-color: #FFFFFF !important;
+    border-top: 1px solid #CCC !important;
 }
 
 /* Chat input inner box */
 .stChatInputContainer > div {
-    background-color: #F5F5F5 !important;  /* Light gray input box */
+    background-color: #F5F5F5 !important;  
     border-radius: 10px !important;
 }
 
-/* Chat input textarea */
+
 [data-testid="stChatInput"] textarea {
-    color: #000000 !important;             /* Black text for input */
+    color: #000000 !important;            
     background-color: #F5F5F5 !important;
     border: 1px solid #CCC !important;
 }
 
-/* Chat input placeholder text */
+
 [data-testid="stChatInput"] p {
-    color: #555555 !important; /* Darker gray for placeholder for better contrast */
+    color: #555555 !important;
 }
 
-/* Sidebar */
+
 [data-testid="stSidebar"] {
-    background-color: #FFFFFF !important; /* White sidebar background */
-    color: #000000 !important;            /* Black text in sidebar */
+    background-color: #FFFFFF !important; 
+    color: #000000 !important;            
 }
 
-/* Sidebar header and markdown */
+
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
 [data-testid="stSidebar"] p, [data-testid="stSidebar"] .stMarkdown {
-    color: #000000 !important; /* Ensure all text in sidebar is black */
+    color: #000000 !important; 
 }
 
 
-/* Footer */
+
 .footer {
     position: fixed;
     bottom: 0;
     left: 0;
     width: 100%;
-    background-color: #F5F5F5; /* Light gray background for footer */
-    color: #333;             /* Dark gray text for footer */
+    background-color: #F5F5F5; 
+    color: #333;             
     text-align: center;
     padding: 10px;
     font-size: 14px;
@@ -87,48 +89,38 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], main, se
 """, unsafe_allow_html=True)
 
 
-# --- Initialize ChromaDB ---
 @st.cache_resource
 def initialize_rag_components():
-    print("Attempting to initialize RAG components...")
-    chroma_manager = ChromaDBManager(CHROMA_DB_PATH, COLLECTION_NAME, create_new=False)
-
-    retries = 5
-    count = 0
-    for i in range(retries):
-        try:
-            count = chroma_manager.collection.count()
-            if count > 0:
-                print(f"ChromaDB has {count} documents loaded from {CHROMA_DB_PATH}.")
-                break
-        except Exception as e:
-            st.error(f"Error checking collection count: {e}")
-        print(f"Retrying collection count (attempt {i+1}/{retries}... Skipping for demo as it might freeze).") # Added note for demo
-        # Removed time.sleep(2) in case it freezes the UI too much, but for real app, keep it.
-        # time.sleep(2) 
-
+    """Initializes the FAISSManager and verifies the index."""
+    print("Attempting to initialize RAG components (FAISS)...")
+    
+    
+    faiss_manager = FAISSManager(FAISS_INDEX_PATH, FAISS_METADATA_PATH) 
+    
+    # Checking if index is loaded and has documents
+    count = faiss_manager.count()
     if count == 0:
         st.warning(f"""
-        **Warning:** ChromaDB collection `{COLLECTION_NAME}` is empty or could not be loaded.
-        Please ensure `vector_store_manager.py` ran successfully to ingest data.
-        Expected path: `{CHROMA_DB_PATH}`
+        **Warning:** FAISS index is empty or could not be loaded.
+        Please ensure `faiss_vector_store_manager.py` ran successfully to ingest data.
+        Expected files: `{FAISS_INDEX_PATH}` and `{FAISS_METADATA_PATH}`
         """)
-        return None
+        return None 
+    else:
+        print(f"FAISS index has {count} documents loaded from {FAISS_INDEX_PATH}.")
+        #st.success(f"RAG system ready! FAISS index has {count} documents loaded.")
+    
+    return faiss_manager
 
-    return chroma_manager
 
-# --- Try Initialization ---
-chroma_manager_instance = initialize_rag_components()
+faiss_manager_instance = initialize_rag_components()
 
-# --- Title and Description (Removed inline styles) ---
-st.markdown("<h1 style='text-align:center;'>⚡ Hydrogen Rules of Thumb</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>Ask about hydrogen energy rules</p>", unsafe_allow_html=True)
 
-# --- Chatbot Interface ---
-if chroma_manager_instance:
-    # Display success message at the top of the chat area
-    #st.success(f"RAG system ready! ChromaDB has {chroma_manager_instance.collection.count()} documents loaded.")
+st.markdown("<h1 style='text-align:center;'>⚡ Hydrogen 'Rules of Thumb'</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>Ask about hydrogen energy rules.</p>", unsafe_allow_html=True)
 
+# Chatbot Interface 
+if faiss_manager_instance: 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -147,7 +139,7 @@ if chroma_manager_instance:
         with st.chat_message("assistant", avatar="🤖"):
             with st.spinner("Thinking..."):
                 try:
-                    response = rag_agent_query(user_input, chroma_manager_instance)
+                    response = rag_agent_query(user_input, faiss_manager_instance)
                 except Exception as e:
                     response = f"⚠️ Error: {e}"
                 st.markdown(response)
@@ -156,9 +148,11 @@ else:
     st.error("RAG system could not be initialized. Please check the console for errors and ensure data ingestion.")
 
 
-# --- Footer ---
+
+
+
 st.markdown("""
 <div class="footer">
-    ⚛️ Made by IntuiNext Inc.
+    Please do not share any sensitive or personal information
 </div>
 """, unsafe_allow_html=True)
