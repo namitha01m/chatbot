@@ -141,7 +141,7 @@ if faiss_manager_instance:
                 try:
                     response = rag_agent_query(user_input, faiss_manager_instance)
                 except Exception as e:
-                    response = f"⚠️ Error: {e}"
+                    response = f" Error: {e}"
                 st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 else:
@@ -156,4 +156,3 @@ st.markdown("""
     Please do not share any sensitive or personal information
 </div>
 """, unsafe_allow_html=True)
-

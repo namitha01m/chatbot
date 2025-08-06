@@ -6,11 +6,11 @@ import time
 
 
 from vector_store_manager import FAISSManager, FAISS_INDEX_PATH, FAISS_METADATA_PATH, generate_embeddings
-# checking for evaltion
-#from evaluation import evaluate_groundedness, evaluate_relevance
+# checking for evaluation
+from evaluation import evaluate_groundedness, evaluate_relevance
 
 OLLAMA_API_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL_NAME = "llama3"
+OLLAMA_MODEL_NAME = "gemma:2b"
 N_RETRIEVED_CHUNKS = 5
 
 #  Llama 
@@ -75,7 +75,7 @@ def rag_agent_query(user_query: str, faiss_manager: FAISSManager) -> str:
         return "I couldn't find enough relevant information in my knowledge base to answer that question. Please try rephrasing or ask about a different topic."
     
     # for evaluation
-    #context_string = "\n\n".join(context_chunks)
+    context_string = "\n\n".join(context_chunks)
 
     #citation
     sources_for_llm_citation = ""
@@ -96,7 +96,7 @@ def rag_agent_query(user_query: str, faiss_manager: FAISSManager) -> str:
         "For example: (Source: filename)."
     )
 
-    context_string = "\n\n".join(context_chunks)
+    # context_string = "\n\n".join(context_chunks)
 
     full_prompt = (
         f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n"
@@ -109,9 +109,9 @@ def rag_agent_query(user_query: str, faiss_manager: FAISSManager) -> str:
         f"<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n"
     )
 
-    print("Generating response with Llama model...")
+    
     llama_response = generate_llama_response(full_prompt)
-    '''
+    
     print("\n--- Evaluating Response Quality ---")
     groundedness_score, groundedness_reason = evaluate_groundedness(llama_response, context_string)
     print(f"Groundedness Score: {groundedness_score:.2f}, Reason: '{groundedness_reason}'")
@@ -119,7 +119,7 @@ def rag_agent_query(user_query: str, faiss_manager: FAISSManager) -> str:
     relevance_score, relevance_reason = evaluate_relevance(user_query, llama_response)
     print(f"Relevance Score: {relevance_score:.2f}, Reason: '{relevance_reason}'")
     print("-----------------------------------\n")
-    '''
+    
     return llama_response
 
 
@@ -146,7 +146,7 @@ if __name__ == "__main__":
         exit()
 
     print(f"\n--- Hydrogen 'Rules of Thumb' Agent ---")
-    print(f"Powered by Llama3 ({OLLAMA_MODEL_NAME}) and FAISS.")
+    
     print("Type your query and press Enter. Type 'exit' to quit.")
 
     while True:
